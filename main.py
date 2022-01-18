@@ -15,7 +15,7 @@ from pdfminer.image import ImageWriter
 
 if not sys.warnoptions:
     import warnings
-    warnings.simplefilter("ignore")
+    warnings.simplefilter('ignore')
 
 
 def extract_information(pdf_path):
@@ -24,7 +24,7 @@ def extract_information(pdf_path):
         information = pdf.getDocumentInfo()
         number_of_pages = pdf.getNumPages()
 
-    txt = f"""
+    txt = f'''
     Information about {pdf_path}: 
 
     Author: {information.author}
@@ -33,7 +33,7 @@ def extract_information(pdf_path):
     Subject: {information.subject}
     Title: {information.title}
     Number of pages: {number_of_pages}
-    """
+    '''
 
     print(txt)
     return information
@@ -85,7 +85,7 @@ def pdf2text(fn, output):
     laparams = LAParams()
     laparams.all_texts = True
     imagewriter = None
-    outfp = open('texts' + os.sep + output, 'w')
+    outfp = open('texts' + os.sep + output, 'w', encoding='utf-8')
     device = TextConverter(rsrcmgr, outfp, laparams=laparams,
                            imagewriter=imagewriter)
     with open(fn, 'rb') as fp:
@@ -102,9 +102,12 @@ def pdf2text(fn, output):
     device.close()
     outfp.close()
 
+
 def clean_texts(fn):
-    with open(fn, 'r') as fi:
-        with open(fn[:-4] + '_cleaned.txt', 'w') as fo:
+    current = os.getcwd() + os.sep + 'cleaned'
+    os.mkdir(current) if not os.path.isdir(current) else ''
+    with open(fn, 'r', encoding='utf-8') as fi:
+        with open('cleaned' + os.sep + fn, 'w', encoding='utf-8') as fo:
             prev = ''
             for l in fi.readlines():
                 line = l.strip()
@@ -116,19 +119,20 @@ def clean_texts(fn):
                 prev = line
 
 
-
 if __name__ == '__main__':
-    # try:
     for path in get_pdfs():
         print(path)
         fo = path[:-4] + '.txt'
-        pdf2text('pdfs' + os.sep + path, fo)
-        cwd = os.getcwd()
-        os.chdir(cwd + os.sep + 'texts')
-        clean_texts(path[:-4] + '.txt')
-        os.chdir(cwd)
-        # extract_information(path)
-        # print(get_page_text(path, 3))
-        # get_all_raw_text(path)
-    # except:
-    #     print('No pdfs')
+        try:
+            pdf2text('pdfs' + os.sep + path, fo)
+            cwd = os.getcwd()
+            os.chdir(cwd + os.sep + 'texts')
+            try:
+                clean_texts(path[:-4] + '.txt')
+            except UnicodeEncodeError as err:
+                print('UnicodeEncodeError cleaning file: ' + path)
+                print(err)
+            os.chdir(cwd)
+        except UnicodeDecodeError as err:
+            print('Error executing pdf2text with file: ' + path)
+            print(err)
