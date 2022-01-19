@@ -2,6 +2,7 @@ import sys
 import os
 
 from PyPDF2 import PdfFileReader
+from tqdm import tqdm
 
 from pdfminer.pdfdocument import PDFDocument
 from pdfminer.pdfparser import PDFParser
@@ -120,19 +121,23 @@ def clean_texts(fn):
 
 
 if __name__ == '__main__':
-    for path in get_pdfs():
-        print(path)
+    file_paths = tqdm(get_pdfs())
+    for path in file_paths:
+        file_paths.set_description('pdf2text: {:<20}'.format(path))
         fo = path[:-4] + '.txt'
         try:
             pdf2text('pdfs' + os.sep + path, fo)
             cwd = os.getcwd()
             os.chdir(cwd + os.sep + 'texts')
             try:
+                file_paths.set_description(
+                    'Cleaning text: {:<20}'.format(path))
                 clean_texts(path[:-4] + '.txt')
             except UnicodeEncodeError as err:
-                print('UnicodeEncodeError cleaning file: ' + path)
+                print('\n'*2 + '*'*5 +
+                      'UnicodeEncodeError cleaning file: ' + path + '\n'*2)
                 print(err)
             os.chdir(cwd)
         except UnicodeDecodeError as err:
-            print('Error executing pdf2text with file: ' + path)
+            print('\n'*2 + '*'*5 + 'Error executing pdf2text with file: ' + path + '\n'*2)
             print(err)
