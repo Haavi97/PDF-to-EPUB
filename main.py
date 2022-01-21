@@ -1,8 +1,10 @@
+from importlib.metadata import metadata
 import sys
 import os
 
 from PyPDF2 import PdfFileReader
 from tqdm import tqdm
+from ebooklib import epub
 
 from pdfminer.pdfdocument import PDFDocument
 from pdfminer.pdfparser import PDFParser
@@ -77,6 +79,8 @@ def default_folders():
     os.mkdir(current) if not os.path.isdir(current) else ''
     current = os.getcwd() + os.sep + 'texts'
     os.mkdir(current) if not os.path.isdir(current) else ''
+    current = os.getcwd() + os.sep + 'epubs'
+    os.mkdir(current) if not os.path.isdir(current) else ''
 
 
 def pdf2text(fn, output):
@@ -120,24 +124,103 @@ def clean_texts(fn):
                 prev = line
 
 
+def create_epub_metadata(book, metadata):
+    book.set_identifier(metadata.autor + metadata.title)
+    book.set_title(metadata.title)
+    book.set_language('en')
+    book.add_author(metadata.author)
+    if metadata.subject != None:
+        book.add_metadata('DC', 'description', metadata.subject)
+    if metadata.creator != None:
+        book.add_metadata(None, 'meta', '', {
+                          'name': 'creator', 'content': metadata.creator})
+    if metadata.producer != None:
+        book.add_metadata(None, 'meta', '', {
+                          'name': 'producer', 'content': metadata.producer})
+
+
+def create_epub_metadata_from_pdf(book, pdf):
+    fp = open(pdf, 'rb')
+    parser = PDFParser(fp)
+    doc = PDFDocument(parser)
+    metadata = doc.info[0]
+    print('\n'*2, metadata, '\n'*2)
+    try:
+        book.set_title(metadata['Title'])
+        book.set_language('en')
+    except KeyError:
+        print('Title not found in {}'.format(pdf))
+    try:
+        book.add_author(metadata['Author'])
+    except KeyError:
+        print('Author not found in {}'.format(pdf))
+    try:
+        book.set_identifier(metadata['Author'] + metadata['Title'])
+    except KeyError:
+        pass
+    try:
+        book.add_metadata(None, 'meta', '', {
+                            'name': 'creator', 'content': metadata['Creator']})
+    except KeyError:
+        print('Creator not found in {}'.format(pdf))
+    try:
+        book.add_metadata(None, 'meta', '', {
+                        'name': 'producer', 'content': metadata['Producer']})
+    except KeyError:
+        print('Producer not found in {}'.format(pdf))
+    try:
+        book.add_metadata(None, 'meta', '', {
+                        'name': 'creationDate', 'content': metadata['CreationDate']})
+    except KeyError:
+        print('CreationDate not found in {}'.format(pdf))
+    try:
+        book.add_metadata(None, 'meta', '', {
+                        'name': 'Keywords', 'content': metadata['Keywords']})
+    except KeyError:
+        print('Keywords not found in {}'.format(pdf))
+    return book
+
+
+def strip_extension(f):
+    return '.'.join(f.split('.')[:-1])
+
+
+def cd_create(folder):
+    os.mkdir(folder) if not os.path.isdir(folder) else ''
+    os.chdir(folder)
+
+
+
 if __name__ == '__main__':
     file_paths = tqdm(get_pdfs())
+    succes = 0
+    fail = 0
     for path in file_paths:
         file_paths.set_description('pdf2text: {:<20}'.format(path))
-        fo = path[:-4] + '.txt'
+        raw_fn = strip_extension(path)
+        fo = raw_fn + '.txt'
         try:
             pdf2text('pdfs' + os.sep + path, fo)
             cwd = os.getcwd()
-            os.chdir(cwd + os.sep + 'texts')
+            cd_create(cwd + os.sep + 'texts')
             try:
                 file_paths.set_description(
                     'Cleaning text: {:<20}'.format(path))
-                clean_texts(path[:-4] + '.txt')
+                clean_texts(raw_fn + '.txt')
             except UnicodeEncodeError as err:
                 print('\n'*2 + '*'*5 +
                       'UnicodeEncodeError cleaning file: ' + path + '\n'*2)
                 print(err)
             os.chdir(cwd)
+            book = create_epub_metadata_from_pdf(
+                epub.EpubBook(), 'pdfs' + os.sep + path)
+            cd_create(cwd + os.sep + 'epubs')
+            epub.write_epub(raw_fn + '.epub', book)
+            os.chdir(cwd)
+            succes += 1
         except UnicodeDecodeError as err:
-            print('\n'*2 + '*'*5 + 'Error executing pdf2text with file: ' + path + '\n'*2)
+            print('\n'*2 + '*'*5 +
+                  'Error executing pdf2text with file: ' + path + '\n'*2)
             print(err)
+            fail += 1
+    print('\nSuccess: {} Fail: {}'.format(succes, fail))
