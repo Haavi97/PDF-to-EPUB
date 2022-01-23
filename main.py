@@ -1,6 +1,6 @@
-from importlib.metadata import metadata
 import sys
 import os
+import re
 
 from PyPDF2 import PdfFileReader
 from tqdm import tqdm
@@ -171,16 +171,16 @@ def create_epub_metadata(book, metadata):
 
 def add_html_to_epub(book, html):
     c1 = epub.EpubHtml(title='Main content',
-                   file_name='main.xhtml',
-                   lang='en')
+                       file_name='main.xhtml',
+                       lang='en')
     with open(html, 'r', encoding='utf-8') as f:
         c1.set_content(f.read())
     book.toc = (epub.Link('main.xhtml', 'Main content', 'main'),
-            (
-            epub.Section('Languages'),
-            (c1,)
-            )
-        )
+                (
+        epub.Section('Languages'),
+        (c1,)
+    )
+    )
     book.spine = ['nav', c1]
     book.add_item(epub.EpubNcx())
     book.add_item(epub.EpubNav())
@@ -234,6 +234,21 @@ def strip_extension(f):
     return '.'.join(f.split('.')[:-1])
 
 
+def clean_html(fn):
+    current = os.getcwd() + os.sep + 'cleaned'
+    os.mkdir(current) if not os.path.isdir(current) else ''
+    with open(fn, 'r', encoding='utf-8') as fi:
+        with open('cleaned' + os.sep + fn, 'w', encoding='utf-8') as fo:
+            new_html, n = re.subn('<div style=".*;">', '', fi.read())
+            # TODO! clean html from untag </div>
+            new_html, n = re.subn('border:[^;]*;', '', new_html)
+            new_html, n = re.subn('</div>', '', new_html)
+            print('\nCleaning {} from div style. substituted {} times.'.format(fn[4:], n))
+            # new_html, n = re.subn('writing-mode:lr-tb;', '', new_html)
+            # print('\nCleaning {} from writing-mode:lr-tb;. substituted {} times.'.format(fn[4:], n))
+            fo.write(new_html)
+
+
 def cd_create(folder):
     os.mkdir(folder) if not os.path.isdir(folder) else ''
     os.chdir(folder)
@@ -254,7 +269,7 @@ if __name__ == '__main__':
             try:
                 file_paths.set_description(
                     'Cleaning text: {:<20}'.format(path))
-                clean_texts(raw_fn + '.txt')
+                clean_texts(fo)
             except UnicodeEncodeError as err:
                 print('\n'*2 + '*'*5 +
                       'UnicodeEncodeError cleaning file: ' + path + '\n'*2)
@@ -264,7 +279,20 @@ if __name__ == '__main__':
                 epub.EpubBook(), 'pdfs' + os.sep + path)
             html_path = raw_fn + '.html'
             pdf2html('pdfs' + os.sep + path, html_path)
-            add_html_to_epub(book, 'htmls' + os.sep + html_path)
+
+            cd_create(cwd + os.sep + 'htmls')
+            try:
+                file_paths.set_description(
+                    'Cleaning html: {:<20}'.format(path))
+                clean_html(html_path)
+            except UnicodeEncodeError as err:
+                print('\n'*2 + '*'*5 +
+                      'UnicodeEncodeError cleaning file: ' + path + '\n'*2)
+                print(err)
+            os.chdir(cwd)
+
+            add_html_to_epub(book, 'htmls' + os.sep +
+                             'cleaned' + os.sep + html_path)
             cd_create(cwd + os.sep + 'epubs')
             epub.write_epub(raw_fn + '.epub', book)
             os.chdir(cwd)
